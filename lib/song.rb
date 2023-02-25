@@ -1,52 +1,64 @@
+require 'sqlite3'
+
 class Song
+  attr_accessor :id, :name, :album
 
-  attr_accessor :name, :album, :id
-
-  def initialize(name:, album:, id: nil)
-    @id = id
-    @name = name
-    @album = album
-  end
-
-  def self.drop_table
-    sql = <<-SQL
-      DROP TABLE IF EXISTS songs
-    SQL
-
-    DB[:conn].execute(sql)
+  def initialize(attributes)
+    @id = attributes[:id]
+    @name = attributes[:name]
+    @album = attributes[:album]
   end
 
   def self.create_table
-    sql = <<-SQL
+    DB.execute <<-SQL
       CREATE TABLE IF NOT EXISTS songs (
         id INTEGER PRIMARY KEY,
         name TEXT,
         album TEXT
       )
     SQL
-
-    DB[:conn].execute(sql)
   end
 
   def save
-    sql = <<-SQL
-      INSERT INTO songs (name, album)
-      VALUES (?, ?)
-    SQL
-
-    # insert the song
-    DB[:conn].execute(sql, self.name, self.album)
-
-    # get the song ID from the database and save it to the Ruby instance
-    self.id = DB[:conn].execute("SELECT last_insert_rowid() FROM songs")[0][0]
-
-    # return the Ruby instance
+    if self.id
+      self.update
+    else
+      DB.execute("INSERT INTO songs (name, album) VALUES (?, ?)", self.name, self.album)
+      @id = DB.last_insert_row_id
+    end
     self
   end
 
-  def self.create(name:, album:)
-    song = Song.new(name: name, album: album)
-    song.save
+  def update
+    DB.execute("UPDATE songs SET name = ?, album = ? WHERE id = ?", self.name, self.album, self.id)
   end
 
+  def self.create(attributes)
+    song = Song.new(attributes)
+    song.save
+    song
+  end
+
+  def self.new_from_db(row)
+    Song.new(id: row[0], name: row[1], album: row[2])
+  end
+
+  def self.all
+    DB.execute("SELECT * FROM songs").map do |row|
+      Song.new_from_db(row)
+    end
+  end
+
+  def self.find_by_name(name)
+    row = DB.execute("SELECT * FROM songs WHERE name = ?", name).first
+    Song.new_from_db(row) if row
+  end
+end
+
+# set up the database connection
+DB = SQLite3::Database.new(":memory:")
+
+# run the tests
+RSpec.describe Song do
+  # ...
 end
